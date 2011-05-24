@@ -116,6 +116,7 @@ const DEFAULT_OPTIONS = {
 // Paths to all files that should be server to client.
 const CLIENT_DATA = [
   'client/index.html', '',
+  'client/solo.html', '',
   'client/style.css', '',
   'client/logo.png', '',
   'client/space.jpg', '',

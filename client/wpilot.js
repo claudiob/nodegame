@@ -541,6 +541,10 @@ WPilotClient.prototype.start_gameloop = function(initial_tick) {
   gameloop.ontick = function(t, dt) {
     self.process_user_input(t, dt);
     self.world.update(t, dt);
+    // claudiob -- when there's no server, the player updates itself
+    if(!this.conn && self.player.entity) {
+      self.world.update_player_state(self.player.id, self.player.entity.pos)
+    }
   }
   
   // Is called when loop is about to start over.
@@ -678,7 +682,9 @@ WPilotClient.prototype.post_game_packet = function(msg) {
     this.netstat.bytes_sent += packet.length;
     this.netstat.messages_sent += 1;
   }
-  this.conn.send(packet);
+  // claudiob -- when there's no server, there is no conn either
+  if(this.conn)
+    this.conn.send(packet);
 }
 
 /**
@@ -1279,7 +1285,8 @@ Ship.prototype.destroy = function(death_cause, killer_id) {
   this.destroyed = true;
   this.death_cause = death_cause;
   this.destroyed_by = killer_id;
-  this.animations['die'].set_active(true);
+  // claudiob -- the following looks like legacy code, there is no 'die' now
+  // this.animations['die'].set_active(true);
 }
 
 
