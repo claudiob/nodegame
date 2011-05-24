@@ -20,21 +20,95 @@
 			  var options = $.extend({}, DEFAULT_OPTIONS);
 			  var canvas = $('#viewport canvas');
 
+        // index.html
 			  var viewport  = new ViewportDevice(canvas[0], canvas.width(), canvas.height(), options),
 			      keyboard  = new KeyboardDevice(document, options),
 						sound			= new SoundDevice(options);
-				
 			  wpilot = new WPilotClient(options);
 			  wpilot.set_viewport(viewport)
 			  wpilot.set_input(keyboard);
 			  wpilot.set_sound(sound);
-        // OP_WORLD_DATA
-        var world = new World(true) // true so I manage collisions etc
+			  
+        // here wpilot.join(url) would create the socket. The server would:
+        // conn.addListener('connect', function(resource) {
+        //   conn.set_state(CONNECTED);
+        // });
+        
+        // and the client would:
+        // self.conn.onopen = function(event){
+        //   self.is_connected = true;
+        //   self.set_state(CLIENT_CONNECTING);
+        //   setTimeout(function() {
+        //     self.conn.send(JSON.stringify([OP_REQ_SERVER_INFO]));
+        //   }, 100);
+        // };
+        
+        // Sending OP_REQ_SERVER_INFO would have the server:
+        // [[OP_REQ_SERVER_INFO], {'state =': CONNECTED}],
+        // function(conn) {
+        //   conn.send_server_info();
+        // },
+
+
+        // which corresponds to:
+        // conn.post([OP_SERVER_INFO, shared.get_state()]);
+        
+        // Getting OP_SERVER_INFO would:
+        // [[OP_SERVER_INFO, Object], _], 
+        // function(state, client) {
+        //   client.set_server_state(state);
+        // },
+        
+        // and set_server_state would:
+        // WPilotClient.prototype.set_server_state = function(state) {
+        //   if (state.no_players != state.max_players) {
+        //     this.server_state = state;
+        //     this.log('Recived server state, now joining game...');
+        //     this.post_control_packet([OP_CLIENT_CONNECT, CLIENT_VERSION]);
+        //   } else {
+        //     this.log('Server is full');
+        //   }
+        // }
+
+        var my_rules = {respawn_time: 400, reload_time: 15, shoot_cost: 300, 
+         shield_cost: 30, energy_recovery: 30, round_limit: 10, 
+         suicide_penelty: 1, kill_score: 1, powerup_max: 2, powerup_respawn:
+         600, powerup_spread_t: 700, powerup_rapid_t: 600, powerup_rico_t: 600}
+        var state = {max_players: 1, no_players: 1, rules: my_rules}
+        // state[r_state] = ROUND_RUNNING
+
+        if (state.no_players != state.max_players) {
+          wpilot.log('Game is full')
+          return
+        }
+        
+        // Sending OP_CLIENT_CONNECT would:
+        // [[OP_CLIENT_CONNECT, String], {'state =': CONNECTED}], 
+        // function(version, conn) {
+        //   if (version != SERVER_VERSION) {
+        //     conn.kill('Wrong version');
+        //   } else {
+        //     conn.set_state(HANDSHAKING);
+        //   }
+        // },
+        
+        // and conn.set_state(HANDSHAKING) would:
+        // if (!gameloop) {start_gameloop()}
+        // if (world.no_players < world.max_players) {
+        //   conn.post([OP_WORLD_DATA, world.map_data, world.rules]);
+        // }
+        
+        // And sending OP_WORLD_DATA would:
+        //>> var world = new World(false);
+        //>> world.build(map_data, rules);
+        // client.log('World data loaded...');
+        //>> client.set_world(world);
+        // client.set_state(CLIENT_CONNECTED);
+
         var map_data = {
         	name: 'Battle Royale',
         	author: 'Johan Dahlberg',
         	recommended_players: 8,
-
         	data: [
         		[51,  0,  0, 51,  0,  0, 51],
         		[ 0, 11, 11,  0, 11, 11,  0],
@@ -45,42 +119,98 @@
         		[51,  0,  0, 51,  0,  0, 51]
         	]
         }
-        var my_rules = {respawn_time:       400,
-        reload_time:        15,
-        shoot_cost:         300,
-        shield_cost:        30,
-        energy_recovery:    30,
-        round_limit:        10,
-        suicide_penelty:    1,
-        kill_score:         1,
-        powerup_max:        2,
-        powerup_respawn:    600,
-        powerup_spread_t:   700,
-        powerup_rapid_t:    600,
-        powerup_rico_t:     600}
+
+        var world = new World(true)   // so we manage collisions etc
+        world.build(map_data, my_rules);
+        wpilot.set_world(world);
         
+        // And sending CLIENT_CONNECTED would:
+        // this.log('Joined server ' + this.conn.URL + '...');
+        // this.post_control_packet([OP_CLIENT_JOIN, {
+        //   name: this.options.name,
+        //   rate: this.options.rate,
+        //   dimensions: [this.viewport.w, this.viewport.h] 
+        // }]);  
+        
+        // And sending OP_CLIENT_JOIN would:
+        // conn.set_client_info(info);
+        // conn.set_state(JOINED);
+        
+        // And setting JOINED would:
+        // var playeridincr = 0;  
+        // while (world.players[++playeridincr]);
+        // conn.player = world.add_player(playeridincr, conn.player_name);
+        // conn.post([OP_WORLD_STATE, conn.player.id].concat(world.get_repr()));
+        // log(conn + conn.player_name + ' joined the game.');
+        
+        
+        // And sending OP_WORLD_STATE would:
+        //>> client.world.set_state(state, players, powerups);
+        //>> client.set_player(client.world.players[my_id]);
+        //>> client.start_gameloop(client.world.tick);
 
-        world.build(map_data, my_rules)
+        my_id = 1
+        my_name = 'claudio'
+        players = [new Player({id: my_id, name: my_name})]
+        powerups = []
 
-        world.build(map_data, my_rules)
-        wpilot.log('World data loaded...')
-        wpilot.set_world(world)
-        // OP_WORLD_STATE
-        var my_id = 1
-        var my_name = 'claudio'
-        var player = new Player({ id: my_id, name: my_name});
-        var players = [player]
-        wpilot.world.players = players
-        var powerups = []
-        var state = {max_players: 2, no_players: 1, rules: my_rules}
         wpilot.world.set_state(state, players, powerups);
         wpilot.set_player(wpilot.world.players[my_id]);
         wpilot.start_gameloop(wpilot.world.tick);
-        // OP_PLAYER_INFO
-        wpilot.world.update_player_info(my_id, 100, true, my_name)
-        // wpilot.world.update_player_state(my_id, wpilot.player.entity.pos, wpilot.player.entity.angle, wpilot.player.entity.action)
         
-        // World.prototype.update_state
+        // And world.set_state would:
+        //>> for (var i = 0; i < players.length; i++) {
+        //>>  this.players[player.id] =  new Player(players[i])
+        //>>  var entity = new Ship(player: player)
+        //>>    this.add_entity(entity);
+        //>>    player.entity = entity;
+        //>>  }
+        //>> for (var i = 0; i < powerups.length; i++) {
+        //>>   this.powerups[powerup.powerup_id] = new Powerup(powerups[i])
+        //>>   this.add_entity(powerup);
+        //>> }
+        
+        // And client.start_gameloop would:
+        //>> var gameloop = new GameLoop(initial_tick);
+        //>> gameloop.start();
+        
+        // And at each gameloop.ontick would:
+        //>> self.process_user_input(t, dt);
+        //>> self.world.update(t, dt);
+        // // claudiob -- when there's no server, the player updates itself
+        // if(self.world.server_mode)
+        //   self.world.update_player_state(self.player.id, self.player.entity.pos)
+
+        
+        
+        // // OP_WORLD_DATA
+        // var world = new World(true) // true so I manage collisions etc
+        // 
+        // 
+        // world.build(map_data, my_rules)
+        // wpilot.log('World data loaded...')
+        // wpilot.set_world(world)
+        // // OP_WORLD_STATE
+        // 
+        // 
+        // var my_name = 'claudio'
+        // var playeridincr = 0
+        // while (wpilot.world.players[++playeridincr]);
+        // var player = wpilot.world.add_player(playeridincr, my_name)
+        // 
+        // var my_id = player.id
+        // // var player = { id: my_id, name: my_name}
+        // var players = [player]
+        // // wpilot.world.players = players
+        // var powerups = []
+        // wpilot.world.set_state(state, players, powerups);
+        // wpilot.set_player(wpilot.world.players[my_id]);
+        // wpilot.start_gameloop(wpilot.world.tick);
+        // 
+        // // OP_PLAYER_INFO
+        // 
+        // // World.prototype.update_state
+        wpilot.world.players[my_id].respawn_time = 10000
         wpilot.world.spawn_player(my_id);
 
 

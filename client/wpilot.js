@@ -540,12 +540,17 @@ WPilotClient.prototype.start_gameloop = function(initial_tick) {
   // Is called on each game tick.
   gameloop.ontick = function(t, dt) {
     self.process_user_input(t, dt);
+    // claudiob -- when there's no server, the player updates its own position
+    // in the world so the camera can show the right portion on the screen
+    // if(!this.conn && self.player.entity) {
+    if(self.world.server_mode && self.player.entity)
+      self.player.entity.pos_sv = self.player.entity.pos
+    // The same with OP_PLAYER_INFO which is not sent on solo games
+    if(self.world.server_mode)
+      self.world.update_player_info(self.player.id, 100, true, self.player.name)
     self.world.update(t, dt);
-    // claudiob -- when there's no server, the player updates itself
-    if(!this.conn && self.player.entity) {
-      self.world.update_player_state(self.player.id, self.player.entity.pos)
-    }
   }
+  
   
   // Is called when loop is about to start over.
   gameloop.ondone = function(t, dt, alpha) {
@@ -677,14 +682,15 @@ WPilotClient.prototype.leave = function(reason) {
  *  @return {undefined} Nothing
  */
 WPilotClient.prototype.post_game_packet = function(msg) {
+  // claudiob -- when there's no server, there is no conn either
+  if(!self.world || self.world.server_mode) return
+
   var packet = JSON.stringify([GAME_PACKET, msg]);
   if (this.netstat.start_time) {
     this.netstat.bytes_sent += packet.length;
     this.netstat.messages_sent += 1;
   }
-  // claudiob -- when there's no server, there is no conn either
-  if(this.conn)
-    this.conn.send(packet);
+  this.conn.send(packet);
 }
 
 /**
@@ -1251,7 +1257,6 @@ Ship.prototype.on_after_init = function() {
 }
 
 Ship.prototype.world_update = function(t, dt) {
-
   this.move(t, dt);
   
   if (Math.abs(this.pos[0] - this.pos_sv[0]) > 0.01 || 
