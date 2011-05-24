@@ -1,0 +1,151 @@
+<!doctype html>
+<html>
+  <head>
+    <title>Nodegame</title>
+    <script type="text/javascript" src="jquery.min.js"></script>
+    <script type="text/javascript" src="shared/signals.js"></script>
+    <script type="text/javascript" src="index.js"></script>
+
+    <script type="text/javascript" src="/socket.io/socket.io.js"></script> 
+    <!--script type="text/javascript" src="game_client.js"></script-->
+    <script type="text/javascript" src="socket_client.js"></script>
+
+    <script type="text/javascript" src="devices.js"></script>
+
+    <script>
+      $(document).ready(function() {
+        $('#socket-status').html('Client version: ' + CLIENT_VERSION)
+        
+        // Draw a canvas (or exit if unsupported)
+        var canvas = null
+  			function supports_canvas_text() {
+  			  if (!document.createElement('canvas').getContext) { return false; }
+  			  canvas = document.createElement('canvas');
+  			  var context = canvas.getContext('2d');
+  			  return typeof context.fillText == 'function';
+  			}
+				if (!supports_canvas_text()) {
+					return $('#socket-status').text('Your browser doesnt support <canvas> or fillText.');
+				} else {
+				  $('body').append(canvas)
+				}
+
+			  // NOTE: The following should be moved to the ondone
+			  var viewport  = new ViewportDevice(canvas, 400, 400)
+			  viewport.refresh(0)
+        
+        // Fill the socket panel form with default options and show it
+        var options = $.extend({}, DEFAULT_CLIENT_OPTIONS)
+        $('#socket-panel input[name="name"]').val(options.name)
+        $('#socket-panel').css('visibility', 'visible')
+
+        // Get the state of the connection from the socket and show it
+        function getServerState() {
+          $('#socket-name').text('Contacting server, please wait...')
+          var startime = new Date()
+          $.getJSON('/state', function(state) {
+            var ping = ((new Date()) - startime)
+            $('#socket-name').html('Server: ' + state.socket_host + ':' + state.socket_port)
+            $('#socket-ping').html('Response time (http): ' + ping + 'ms')
+            $('#socket-join').data('host', state.socket_host)
+            $('#socket-join').data('port', state.socket_port)
+          })
+        }
+        // Wait just to make sure the server is running correctly
+        setTimeout(getServerState, 500)
+
+        // Reload the state of the connection when clicking 'Refresh'
+        $('#socket-refresh').click(function(e) {
+          e.preventDefault()
+          getServerState()
+        })
+        
+        // Connect to the socket
+        function joinServer(host, port) {
+          $('#socket-status').html('Connecting...')
+          options.name = $('#socket-info input[name="name"]').val()
+          var socket = new SocketClient()
+          // DOM actions to perform at the end of socket.on('connect')
+          socket.afterConnect = function() {
+            $('#socket-status').html('Connected')
+            // NOTE: Using visibility instead of .hide() because (for some
+            // reason I have to investigate) hiding #socket-panel makes the
+            // socket disconnect. Strange, because the socket is not inside
+            // this DIV. Until solved, using visibility instead
+            $('#socket-panel').css('visibility', 'hidden')
+          }
+          
+          // DOM actions to perform at the end of socket.on('message')
+          socket.afterMessage = function(data) {
+            // $('#socket-status').html('Receiving data: ' + data)
+          }
+          
+          // DOM actions to perform at the end of socket.on('disconnect')
+          socket.afterDisconnect = function(reason) {
+            $('#socket-status').html('Disconnected (' + (reason || 'Server unavailable') +')')
+            if (reason) {
+              $('#socket-panel').css('visibility', 'visible')
+              $('#socket-name').text('You were disconnected from server ('+ reason +')')
+              setTimeout(getServerState, 2000)
+            }
+          }
+
+          // DOM actions to perform when a choice is required
+          socket.promptChoice = function(signal, choices) {
+            $('body').append('<form id="choices"><select id="available-games"></select><button id="game-select">Choose game</button></form>')
+            $.each(choices, function(i, choice) {
+              $('#available-games').append($("<option></option>").attr("value", choice).text(choice)) 
+            })
+            $('#game-select').click(function(e) {
+              e.preventDefault()
+              // Once a game has been selected, load its libraries
+              // $.getScript('rock-paper-scissors.js', function() {
+              //     console.log('RPS loaded')
+              // })      
+              socket.choose(signal, $('#available-games').val())
+            })
+          }
+
+          // DOM actions to perform after a choice is executed
+          socket.afterChoice = function() {
+            $('#choices').remove()
+          }
+
+          // DOM actions to perform after the world data is received
+          socket.afterDraw = function(world) {
+            // TODO: something with canvas
+            console.log('afterDraw')
+          }
+
+          // DOM actions to perform after a message is logged
+          socket.afterLog = function(message) {
+            $('#socket-status').html(message)
+          }
+
+          socket.join(host, port)
+        }
+      
+        // Connect to the socket when clicking 'Join server'
+        $('#socket-join').click(function(e) {
+          e.preventDefault()
+          var host = $(this).data('host')
+          var port = $(this).data('port')
+          joinServer(host, port)
+        })
+      })
+    </script>
+    
+  </head>
+  <body>
+    <section id="socket-status">Socket status goes here</section>
+    <section id="socket-panel" style="visibility: hidden">
+      <section id="socket-name">Server status goes here</section>
+      <section id="socket-ping">Server ping goes here</section>
+      <form>
+        <label>Your name: <input name="name" type="text"></label>
+        <button id="socket-join">Join server</button> 
+        <span> or <a href="#" id="socket-refresh">Refresh</a></span>
+      </form>
+    </section>
+  </body>
+</html>
